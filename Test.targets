@@ -1,0 +1,67 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="16.0">
+  <!-- Common props & StyleCop -->
+  <Import Project="StyleCop\StyleCop.Targets" Condition="!$(ProjectName.Contains(&quot;Test&quot;)) AND '$(RunCodeAnalysis)' == 'true'" />
+  <PropertyGroup>
+    <StyleCopTreatErrorsAsWarnings>false</StyleCopTreatErrorsAsWarnings>
+    <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
+    <PetroSignsEarthComponentNuGetDir>$(MSBuildThisFileDirectory)</PetroSignsEarthComponentNuGetDir>
+    <CodeAnalysisRuleSetName Condition="'$(CodeAnalysisRuleSetName)' == ''">JewelPolicy.ruleset</CodeAnalysisRuleSetName>
+    <CodeAnalysisRuleSet>$(MSBuildThisFileDirectory)$(CodeAnalysisRuleSetName)</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <!-- Load the dll with the task and execute it -->
+  <UsingTask TaskName="PetroSigns.Earth.Component.CopyPluginSourceFiles" AssemblyFile="$(MSBuildThisFileDirectory)\PetroSigns.Earth.Component.dll" />
+  <UsingTask TaskName="PetroSigns.Earth.Component.JewelSuiteSDKvalidation" AssemblyFile="$(MSBuildThisFileDirectory)\PetroSigns.Earth.Component.dll" />
+  <UsingTask TaskName="PetroSigns.Earth.Component.TestProjectValidation" AssemblyFile="$(MSBuildThisFileDirectory)\PetroSigns.Earth.Component.dll" />
+  <UsingTask TaskName="PetroSigns.Earth.Component.RunPluginUtil" AssemblyFile="$(MSBuildThisFileDirectory)\PetroSigns.Earth.Component.dll" />
+  <UsingTask TaskName="PetroSigns.Earth.Component.CopyPluginUtilDependencies" AssemblyFile="$(MSBuildThisFileDirectory)\PetroSigns.Earth.Component.dll" />
+  <Target Name="InitializeVariables">
+    <PropertyGroup>
+      <LocalFeedPath>$([System.Environment]::GetEnvironmentVariable(`PetroSignsEarth7.4LocalFeed`, System.EnvironmentVariableTarget.User))</LocalFeedPath>
+      <AddinsDirPath>$([System.Environment]::GetEnvironmentVariable(`PetroSignsEarth7.4AddinsDir`, System.EnvironmentVariableTarget.User))</AddinsDirPath>
+      <LocalFeedPath Condition="'$(LocalFeedPath)' == ''">C:\Apps\PetroSigns Earth\7.4\LocalFeed</LocalFeedPath>
+      <AddinsDirPath Condition="'$(AddinsDirPath)' == ''">C:\Apps\PetroSigns Earth\7.4\Shell Add-ins</AddinsDirPath>
+    </PropertyGroup>
+  </Target>
+  <Target Name="ValidateProjects" AfterTargets="InitializeVariables">
+    <JewelSuiteSDKvalidation ProjectDir="$(ProjectDir)" ProjectName="$(MSBuildProjectName)" Condition="!$(ProjectName.Contains(&quot;Test&quot;))" />
+    <TestProjectValidation ProjectPath="$(MSBuildProjectFullPath)" Condition="$(ProjectName.Contains(&quot;Test&quot;))" />
+  </Target>
+  <Target Name="CopyTargetFiles" AfterTargets="AfterBuild" DependsOnTargets="InitializeVariables">
+    <ItemGroup>
+      <FilesToCopy Include="$(SolutionDir)\*.targets" />
+      <FilesToCopy Include="$(SolutionDir)\Bundle.png" Condition="Exists('$(SolutionDir)\Bundle.png')" />
+      <FilesToCopy Include="$(SolutionDir)\Bundle.md" Condition="Exists('$(SolutionDir)\Bundle.md')" />
+      <PluginSourceFiles Include="$(SolutionDir)\*.targets" />
+    </ItemGroup>
+    <Copy SourceFiles="@(FilesToCopy)" DestinationFolder="$(TargetDir)" />
+  </Target>
+  <Target Name="EnsureDirectoriesExists" BeforeTargets="BeforeBuild" DependsOnTargets="ValidateProjects">
+    <MakeDir Directories="$(LocalFeedPath)" Condition="!Exists($(LocalFeedPath))" />
+    <MakeDir Directories="$(AddinsDirPath)" Condition="!Exists($(AddinsDirPath))" />
+  </Target>
+  <Target Name="CopyDependencies" BeforeTargets="CreatePluginLicenseFile">
+    <!--************VERY IMPORTANT: For every major/minor upgrade, please update the sdk version in the below line**********************-->
+    <!--All libraries from the below mentioned versions will be copied to the target directory for every project which has a reference to the pluginlic nuget package-->
+    <CopyPluginUtilDependencies DomainMetaPackageVersion="2021.3.2983" AppMetaPackageVersion="2021.3.2983" UiMetaPackageVersion="2021.3.2983" InfraMetaPackageVersion="2021.3.2983" UnofficialVersion="2021.3.2983" ThirdpartyVersion="2021.3.2983" PluginUtilVersion="2021.3.231" UnsupportedVersion="2021.3.1958" TargetDir="$(TargetDir)">
+    </CopyPluginUtilDependencies>
+  </Target>
+  <!--PIDF copying has been removed from below target as it will be required ONLY for the projects which will have PIDF generated-->
+  <Target Name="CopySourceFiles" AfterTargets="CopyTargetFiles" Condition="'$(BuildingInsideVisualStudio)' == 'true' AND '!$(ProjectName.Contains(&quot;Test&quot;))'">
+    <ItemGroup>
+      <PluginSourceFiles Condition="Exists('$(SharedCoreNuGetPath)\Shell.JewelEarth.Core.Attributes.dll')" Include="$(SharedCoreNuGetPath)\Shell.JewelEarth.Core.Attributes.dll" />
+      <PluginSourceFiles Condition="Exists('$(TargetDir)\$(TargetName)$(TargetExt)')" Include="$(TargetDir)\$(TargetName)$(TargetExt)" />
+      <PluginSourceFiles Condition="Exists('$(TargetDir)\$(TargetName).pdb')" Include="$(TargetDir)\$(TargetName).pdb" />
+    </ItemGroup>
+    <!-- Copy files to Shell Add-ins -->
+    <CopyPluginSourceFiles PluginSourceFiles="@(PluginSourceFiles)" ProjectDir="$(ProjectDir)" MainAssemblyFilePath="$(TargetDir)$(TargetName)$(TargetExt)" DestinationDir="$(AddinsDirPath)" />
+  </Target>
+  <!--The below target is to copy the pidf file after the CreatePluginLicenseFile target gets completed from the pluginlic.targets file-->
+  <Target Name="CopyPIDFFile" AfterTargets="CreatePluginLicenseFile" Condition="'$(BuildingInsideVisualStudio)' == 'true' AND '!$(ProjectName.Contains(&quot;Test&quot;))' AND Exists('$(TargetDir)\$(TargetName).pidf')">
+    <ItemGroup>
+      <PluginSourceFiles Condition="Exists('$(TargetDir)\$(TargetName).pidf')" Include="$(TargetDir)\$(TargetName).pidf" />
+    </ItemGroup>
+    <!--Copy files to Shell Add-ins-->
+    <CopyPluginSourceFiles PluginSourceFiles="@(PluginSourceFiles)" ProjectDir="$(ProjectDir)" MainAssemblyFilePath="$(TargetDir)$(TargetName)$(TargetExt)" DestinationDir="$(AddinsDirPath)" />
+  </Target>
+</Project>
