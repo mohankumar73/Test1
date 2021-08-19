@@ -33,5 +33,5 @@ steps:
     displayName: 'Provide Download Portal Access'
     enabled: true
     inputs:
-      filePath: 'Version.ps1'
+      filePath: 'Test1/Version.ps1'
       errorActionPreference: 'continue'
